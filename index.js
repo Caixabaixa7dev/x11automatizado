@@ -230,21 +230,23 @@ client.on('message', async msg => {
 
     // Define um novo timer de 5 segundos
     userTimers.set(chatId, setTimeout(async () => {
-        const messagesToProcess = userMessageQueue.get(chatId);
-        userMessageQueue.delete(chatId);
-        userTimers.delete(chatId);
-
-        if (!messagesToProcess || messagesToProcess.length === 0) return;
-
-        const combinedMessage = messagesToProcess.join('\n');
-        console.log(`\n📦 Lote processado de ${chatId.split('@')[0]}:\n"${combinedMessage}"`);
-
         try {
-            // Indica pro cliente que o bot está "digitando..."
+            const messagesToProcess = userMessageQueue.get(chatId);
+            userMessageQueue.delete(chatId);
+            userTimers.delete(chatId);
+
+            if (!messagesToProcess || messagesToProcess.length === 0) return;
+
+            const combinedMessage = messagesToProcess.join('\n');
+            console.log(`\n📦 Lote processado de ${chatId.split('@')[0]}:\n"${combinedMessage}"`);
+
+            console.log("-> Pegando chat...");
             const chat = await msg.getChat();
+
+            console.log("-> Mandando state typing...");
             await chat.sendStateTyping();
 
-            // Inicializa o histórico para este usuário se não existir
+            console.log("-> Configurando histórico...");
             if (!userContexts.has(chatId)) {
                 userContexts.set(chatId, [
                     { role: "system", content: SYSTEM_PROMPT }
@@ -263,12 +265,13 @@ client.on('message', async msg => {
 
             let botReply = '';
             try {
-                // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
+                console.log("-> Chamando API Groq...");
                 const completion = await groq.chat.completions.create({
                     model: "llama-3.1-8b-instant",
                     messages: recentHistory,
                     temperature: 0.8
                 });
+                console.log("-> Resposta da Groq gerada.");
                 botReply = completion.choices[0].message.content;
             } catch (groqError) {
                 console.error('❌ ERRO FATAL GROQ:', groqError.error ? groqError.error : groqError);
@@ -278,13 +281,16 @@ client.on('message', async msg => {
             // Adiciona a resposta do bot no histórico para manter o contexto
             chatHistory.push({ role: "assistant", content: botReply });
 
-            // Envia a mensagem de volta pro WhatsApp
+            console.log("-> Enviando mensagem pro WA...");
             await client.sendMessage(chatId, botReply);
             console.log(`🤖 Resposta enviada: ${botReply}`);
 
         } catch (error) {
-            console.error('❌ Erro inesperado na manipulação da fila:', error.message);
-            await client.sendMessage(chatId, 'Opa, tivemos uma instabilidade rápida aqui no sistema. Falhas técnicas, rs. Já volto a te responder!');
+            console.error('❌ ERRO CRIPTO NO TIMER GLOBAL:', error);
+            try {
+                // Tenta avisar pro WhatsApp pelo menos
+                await client.sendMessage(chatId, 'Opa, tivemos uma instabilidade rápida aqui no sistema ao compilar suas fotos/mensagens. Falhas técnicas, rs. Já volto a te responder!');
+            } catch (e2) { }
         }
     }, 5000)); // Espera 5 segundos de silêncio do usuário antes de enviar pra IA
 });
