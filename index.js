@@ -1,6 +1,6 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const OpenAI = require('openai');
+const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const fs = require('fs');
@@ -27,10 +27,9 @@ let transcriber = null;
     }
 })();
 
-// Inicialização da API Local (Ollama)
-const openai = new OpenAI({
-    baseURL: "http://localhost:11434/v1",
-    apiKey: "ollama", // não precisa de chave para localhost, mas a OpenAI SDK exige
+// Inicialização da API Cloud (Groq) ultra-rápida
+const groq = new Groq({
+    apiKey: process.env.GROQ_API_KEY
 });
 
 // Inicialização do Cliente do WhatsApp
@@ -223,10 +222,12 @@ client.on('message', async msg => {
         // Adiciona a nova mensagem do usuário no histórico
         chatHistory.push({ role: "user", content: userMessage });
 
-        // Envia histórico para a API Local (Ollama)
-        const completion = await openai.chat.completions.create({
-            model: "llama3.2:1b",
+        // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
+        const completion = await groq.chat.completions.create({
+            model: "llama-3.1-8b-instant",
             messages: chatHistory,
+            temperature: 0.7,
+            max_tokens: 300
         });
 
         const botReply = completion.choices[0].message.content;
