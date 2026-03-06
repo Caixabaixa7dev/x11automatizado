@@ -87,6 +87,8 @@ ETAPA 6: COMPROVANTES DE PAGAMENTO (PIX)
 
 // Memória de contexto (histórico) de cada cliente
 const userContexts = new Map();
+const userMessageQueue = new Map();
+const userTimers = new Map();
 
 // Geração do QR Code no Terminal
 client.on('qr', (qr) => {
@@ -215,53 +217,76 @@ client.on('message', async msg => {
 
     const userMessage = msg.body;
 
-    try {
-        // Indica pro cliente que o bot está "digitando..."
-        const chat = await msg.getChat();
-        await chat.sendStateTyping();
-
-        // Inicializa o histórico para este usuário se não existir
-        if (!userContexts.has(chatId)) {
-            userContexts.set(chatId, [
-                { role: "system", content: SYSTEM_PROMPT }
-            ]);
-        }
-
-        const chatHistory = userContexts.get(chatId);
-
-        // Adiciona a nova mensagem do usuário no histórico
-        chatHistory.push({ role: "user", content: userMessage });
-
-        // Garante que o histórico não cresça infinitamente (mantém o SYSTEM_PROMPT na posição 0 e os últimos 6 intercâmbios)
-        const recentHistory = chatHistory.length > 7
-            ? [chatHistory[0], ...chatHistory.slice(-6)]
-            : chatHistory;
-
-        let botReply = '';
-        try {
-            // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
-            const completion = await groq.chat.completions.create({
-                model: "llama-3.1-8b-instant",
-                messages: recentHistory,
-                temperature: 0.8
-            });
-            botReply = completion.choices[0].message.content;
-        } catch (groqError) {
-            console.error('❌ ERRO FATAL GROQ:', groqError.error ? groqError.error : groqError);
-            botReply = 'Opa, tivemos uma instabilidade rápida aqui no meu cérebro. Já volto a te responder!';
-        }
-
-        // Adiciona a resposta do bot no histórico para manter o contexto
-        chatHistory.push({ role: "assistant", content: botReply });
-
-        // Envia a mensagem de volta pro WhatsApp
-        await client.sendMessage(chatId, botReply);
-        console.log(`🤖 Resposta enviada: ${botReply}`);
-
-    } catch (error) {
-        console.error('❌ Erro na API Local (Ollama):', error.message);
-        await client.sendMessage(chatId, 'Opa, tivemos uma instabilidade rápida aqui no sistema. Já volto a te responder!');
+    // Adiciona a mensagem atual na fila do usuário
+    if (!userMessageQueue.has(chatId)) {
+        userMessageQueue.set(chatId, []);
     }
+    userMessageQueue.get(chatId).push(userMessage);
+
+    // Cancela o timer anterior se existir, para esperar terminar de falar
+    if (userTimers.has(chatId)) {
+        clearTimeout(userTimers.get(chatId));
+    }
+
+    // Define um novo timer de 5 segundos
+    userTimers.set(chatId, setTimeout(async () => {
+        const messagesToProcess = userMessageQueue.get(chatId);
+        userMessageQueue.delete(chatId);
+        userTimers.delete(chatId);
+
+        if (!messagesToProcess || messagesToProcess.length === 0) return;
+
+        const combinedMessage = messagesToProcess.join('\n');
+        console.log(`\n📦 Lote processado de ${chatId.split('@')[0]}:\n"${combinedMessage}"`);
+
+        try {
+            // Indica pro cliente que o bot está "digitando..."
+            const chat = await msg.getChat();
+            await chat.sendStateTyping();
+
+            // Inicializa o histórico para este usuário se não existir
+            if (!userContexts.has(chatId)) {
+                userContexts.set(chatId, [
+                    { role: "system", content: SYSTEM_PROMPT }
+                ]);
+            }
+
+            const chatHistory = userContexts.get(chatId);
+
+            // Adiciona o lote de mensagens combinadas do usuário no histórico
+            chatHistory.push({ role: "user", content: combinedMessage });
+
+            // Garante que o histórico não cresça infinitamente (mantém o SYSTEM_PROMPT na posição 0 e os últimos 6 intercâmbios)
+            const recentHistory = chatHistory.length > 7
+                ? [chatHistory[0], ...chatHistory.slice(-6)]
+                : chatHistory;
+
+            let botReply = '';
+            try {
+                // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
+                const completion = await groq.chat.completions.create({
+                    model: "llama-3.1-8b-instant",
+                    messages: recentHistory,
+                    temperature: 0.8
+                });
+                botReply = completion.choices[0].message.content;
+            } catch (groqError) {
+                console.error('❌ ERRO FATAL GROQ:', groqError.error ? groqError.error : groqError);
+                botReply = 'Opa, tivemos uma instabilidade rápida aqui no meu cérebro. Já volto a te responder!';
+            }
+
+            // Adiciona a resposta do bot no histórico para manter o contexto
+            chatHistory.push({ role: "assistant", content: botReply });
+
+            // Envia a mensagem de volta pro WhatsApp
+            await client.sendMessage(chatId, botReply);
+            console.log(`🤖 Resposta enviada: ${botReply}`);
+
+        } catch (error) {
+            console.error('❌ Erro inesperado na manipulação da fila:', error.message);
+            await client.sendMessage(chatId, 'Opa, tivemos uma instabilidade rápida aqui no sistema. Falhas técnicas, rs. Já volto a te responder!');
+        }
+    }, 5000)); // Espera 5 segundos de silêncio do usuário antes de enviar pra IA
 });
 
 client.initialize();
