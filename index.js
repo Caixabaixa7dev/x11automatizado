@@ -225,7 +225,7 @@ client.on('message', async msg => {
 
         // Envia histórico para a API Local (Ollama)
         const completion = await openai.chat.completions.create({
-            model: "llama3.1",
+            model: "llama3.2:1b",
             messages: chatHistory,
         });
 
