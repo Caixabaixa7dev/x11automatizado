@@ -237,15 +237,19 @@ client.on('message', async msg => {
             ? [chatHistory[0], ...chatHistory.slice(-6)]
             : chatHistory;
 
-        // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
-        const completion = await groq.chat.completions.create({
-            model: "llama-3.1-8b-instant",
-            messages: recentHistory,
-            temperature: 0.8,
-            max_tokens: 150
-        });
-
-        const botReply = completion.choices[0].message.content;
+        let botReply = '';
+        try {
+            // Envia histórico para a API da Groq Cloud (Llama 3 instantâneo)
+            const completion = await groq.chat.completions.create({
+                model: "llama-3.1-8b-instant",
+                messages: recentHistory,
+                temperature: 0.8
+            });
+            botReply = completion.choices[0].message.content;
+        } catch (groqError) {
+            console.error('❌ ERRO FATAL GROQ:', groqError.error ? groqError.error : groqError);
+            botReply = 'Opa, tivemos uma instabilidade rápida aqui no meu cérebro. Já volto a te responder!';
+        }
 
         // Adiciona a resposta do bot no histórico para manter o contexto
         chatHistory.push({ role: "assistant", content: botReply });
