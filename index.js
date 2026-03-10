@@ -86,16 +86,19 @@ ETAPA 4 — CARRINHO ABANDONADO
 "Oi! Você chegou a dar uma olhadinha no site? Se tiver dúvida no tamanho ou na peça, me chama que eu te ajudo a escolher 🖤"
 
 ETAPA 5 — FORMA DE PAGAMENTO CONFIRMADA PELO CLIENTE NO WHATSAPP
-Quando o cliente disser que vai pagar de PIX ou cartão durante a conversa:
-Se for PIX: "Perfeito [nome]! 💛 Já te mando a chave PIX aqui, um seg! 🙏 Quando você fizer o pagamento é só me mandar o comprovante aqui que a gente já libera seu pedido 🔥"
-Se for CARTÃO: "Ótimo [nome]! 🖤 Já gero seu link de pagamento aqui, um minutinho!"
-NÃO diga que VAI RECEBER um comprovante. É o CLIENTE que vai ENVIAR o comprovante.
-NÃO ofereça mais produtos. Aguarde a intervenção da equipe.
+Quando o cliente disser que vai pagar via PIX ou cartão:
+
+⚠️ REGRA ABSOLUTA: Você NÃO TEM a chave PIX nem o link de pagamento. NÃO invente, NÃO escreva "[chave PIX]", NÃO tente criar um número ou e-mail. NUNCA. Isso cabe à equipe enviar manualmente.
+
+Se for PIX: "Perfeito! 💛 Já aviso nossa equipe pra te mandar a chave PIX aqui em instantes, tudo bem? 🙏 Quando você pagar é só me mandar o comprovante aqui que a gente já separa tudo 🔥"
+Se for CARTÃO: "Ótimo! 🖤 Já aviso nossa equipe pra te mandar o link de pagamento aqui em instantes! 🙏"
+
+NÃO ofereça mais produtos. Pare de falar. Aguarde.
 
 ETAPA 5B — PEDIDO ESTRUTURADO DO SITE
 Quando receber mensagem com o padrão "*DEALTA FITNESS — NOVO PEDIDO*":
-→ Extraia nome, itens, tamanhos, forma de pagamento, total e repasse como confirmação pro cliente.
-Mesma regra: aguarde a intervenção da equipe para enviar PIX/link. Não invente dados.
+→ Extraia nome, itens, tamanhos, forma de pagamento, total e confirme pro cliente.
+Mesma regra: NÃO tente enviar a chave PIX nem o link. Só confirme o pedido.
 
 ETAPA 6 — COMPROVANTE PIX RECEBIDO
 Se o usuário enviar um texto dizendo [COMPROVANTE DE PAGAMENTO DETECTADO] ou [MENSAGEM DE ÁUDIO TRANSCRITA], esse texto foi extraído pelo sistema.
@@ -353,8 +356,11 @@ client.on('message', async msg => {
             // Adiciona a resposta do bot no histórico para manter o contexto
             chatHistory.push({ role: "assistant", content: botReply });
 
-            // Detecta pagamento e notifica o dono
-            const paymentMethod = detectPaymentMethod(combinedMessage);
+            // Detecta pagamento pela mensagem do cliente OU pela resposta da IA (dupla garantia)
+            const paymentFromUser = detectPaymentMethod(combinedMessage);
+            const paymentFromBot = detectPaymentMethod(botReply);
+            const paymentMethod = paymentFromUser || paymentFromBot;
+            console.log(`🔍 Detecção de pagamento: user=${paymentFromUser}, bot=${paymentFromBot}`);
             if (paymentMethod) {
                 console.log(`💳 Pagamento detectado (${paymentMethod}) — notificando dono...`);
                 await notifyOwner(chatId, paymentMethod, chatHistory);
