@@ -85,17 +85,22 @@ ETAPA 3 — AUMENTO DE TICKET (sutil)
 ETAPA 4 — CARRINHO ABANDONADO
 "Oi! Você chegou a dar uma olhadinha no site? Se tiver dúvida no tamanho ou na peça, me chama que eu te ajudo a escolher 🖤"
 
-ETAPA 5 — PEDIDO CONFIRMADO (mensagem estruturada do site)
-Quando receber mensagem com o padrão "*DEALTA FITNESS — NOVO PEDIDO*":
-→ Extraia nome, itens, tamanhos, forma de pagamento, total.
-Se for CARTÃO: "Perfeito [nome]! Já gero seu link de pagamento 🖤 Um minutinho..."
-Se for PIX: "Anotei teu pedido [nome]! Assim que o PIX confirmar, a gente já separa suas peças 💛"
-NÃO ofereça mais produtos. NÃO mande mais links. Encerre com leveza.
+ETAPA 5 — FORMA DE PAGAMENTO CONFIRMADA PELO CLIENTE NO WHATSAPP
+Quando o cliente disser que vai pagar de PIX ou cartão durante a conversa:
+Se for PIX: "Perfeito [nome]! 💛 Já te mando a chave PIX aqui, um seg! 🙏 Quando você fizer o pagamento é só me mandar o comprovante aqui que a gente já libera seu pedido 🔥"
+Se for CARTÃO: "Ótimo [nome]! 🖤 Já gero seu link de pagamento aqui, um minutinho!"
+NÃO diga que VAI RECEBER um comprovante. É o CLIENTE que vai ENVIAR o comprovante.
+NÃO ofereça mais produtos. Aguarde a intervenção da equipe.
 
-ETAPA 6 — COMPROVANTE PIX
+ETAPA 5B — PEDIDO ESTRUTURADO DO SITE
+Quando receber mensagem com o padrão "*DEALTA FITNESS — NOVO PEDIDO*":
+→ Extraia nome, itens, tamanhos, forma de pagamento, total e repasse como confirmação pro cliente.
+Mesma regra: aguarde a intervenção da equipe para enviar PIX/link. Não invente dados.
+
+ETAPA 6 — COMPROVANTE PIX RECEBIDO
 Se o usuário enviar um texto dizendo [COMPROVANTE DE PAGAMENTO DETECTADO] ou [MENSAGEM DE ÁUDIO TRANSCRITA], esse texto foi extraído pelo sistema.
 Se for um COMPROVANTE: analise o valor pago e a data da transação.
-"Uhul [nome]! Recebi o PIX de R$ [valor] aqui ✨ Tô passando pra equipe separar suas pecinhas agora 🔥 Qualquer coisa me chama!"
+"Uhul [nome]! Recebi seu comprovante do PIX de R$ [valor] aqui ✨ Já tô passando pra nossa equipe separar suas pecinhas agora 🔥 Qualquer coisa me chama!"
 
 ETAPA 7 — PERGUNTAS SOBRE PRODUTOS
 Você conhece o catálogo da DEALTA:
@@ -116,6 +121,41 @@ Nunca prometa prazo de entrega exato — "a MRLOG é bem certinha, normalmente e
 Nunca fale mal de concorrentes.
 Se não souber algo: "Deixa eu verificar aqui com a equipe rapidinho!"`;
 
+
+// Número do dono para notificações de pedido
+const OWNER_NUMBER = '5591993572727@c.us';
+
+// Detecta intenção de pagamento na mensagem do cliente
+function detectPaymentMethod(message) {
+    const msg = message.toLowerCase();
+    if (/\bpix\b/.test(msg)) return 'PIX 🔑';
+    if (/cart[aã]o|cr[eé]dito|d[eé]bito/.test(msg)) return 'CARTÃO 💳';
+    return null;
+}
+
+// Extrai o valor total R$ mais recente da conversa
+function extractValue(history) {
+    const allText = history.map(h => h.content).join(' ');
+    const matches = allText.match(/R\$\s?[\d.,]+/gi);
+    return matches ? matches[matches.length - 1] : null;
+}
+
+// Notifica o dono via WhatsApp
+async function notifyOwner(chatId, paymentMethod, history) {
+    const clientNumber = '+' + chatId.split('@')[0];
+    const value = extractValue(history);
+    let msg = `🔔 *ALERTA DE PEDIDO — DEALTA FITNESS*\n\n`;
+    msg += `📱 Cliente: *${clientNumber}*\n`;
+    msg += `💳 Forma de pagamento: *${paymentMethod}*\n`;
+    if (value) msg += `💰 Valor detectado: *${value}*\n`;
+    msg += `\n👆 Acesse o chat e envie a *chave PIX* ou o *link de pagamento*!`;
+    try {
+        await client.sendMessage(OWNER_NUMBER, msg);
+        console.log(`✅ Dono notificado sobre pedido de ${clientNumber}`);
+    } catch (e) {
+        console.error('❌ Erro ao notificar dono:', e);
+    }
+}
 
 // Memória de contexto (histórico) de cada cliente
 const userContexts = new Map();
@@ -312,6 +352,13 @@ client.on('message', async msg => {
 
             // Adiciona a resposta do bot no histórico para manter o contexto
             chatHistory.push({ role: "assistant", content: botReply });
+
+            // Detecta pagamento e notifica o dono
+            const paymentMethod = detectPaymentMethod(combinedMessage);
+            if (paymentMethod) {
+                console.log(`💳 Pagamento detectado (${paymentMethod}) — notificando dono...`);
+                await notifyOwner(chatId, paymentMethod, chatHistory);
+            }
 
             console.log("-> Enviando mensagem pro WA...");
             await client.sendMessage(chatId, botReply);
