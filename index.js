@@ -153,7 +153,13 @@ async function notifyOwner(chatId, paymentMethod, history) {
     if (value) msg += `💰 Valor detectado: *${value}*\n`;
     msg += `\n👆 Acesse o chat e envie a *chave PIX* ou o *link de pagamento*!`;
     try {
-        await client.sendMessage(OWNER_NUMBER, msg);
+        // Resolve o LID real do número antes de enviar (obrigatório em versões recentes do WA)
+        const ownerWid = await client.getNumberId('5591993572727');
+        if (!ownerWid) {
+            console.error('❌ Número do dono não encontrado no WhatsApp. Verifique se +55 91 99357-2727 tem WhatsApp ativo.');
+            return;
+        }
+        await client.sendMessage(ownerWid._serialized, msg);
         console.log(`✅ Dono notificado sobre pedido de ${clientNumber}`);
     } catch (e) {
         console.error('❌ Erro ao notificar dono:', e);
